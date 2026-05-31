@@ -10,15 +10,16 @@ const FORMS = {
     fields: [
       {
         name: 'hodnoceni',
-        label: 'Celkové hodnocení',
+        label: 'Celkové hodnocení (1 = nejlepší, 5 = nejhorší)',
         type: 'rating',
         required: true,
+        defaultValue: '1 - Skvělý',
         options: [
-          '1 - Nespokojen',
-          '2 - Spíš ne',
+          '1 - Skvělý',
+          '2 - Velmi dobrý',
           '3 - Dobrý',
-          '4 - Velmi dobrý',
-          '5 - Skvělý',
+          '4 - Spíš ne',
+          '5 - Nespokojen',
         ],
       },
       {
@@ -88,43 +89,6 @@ const FORMS = {
         type: 'textarea',
         required: false,
         placeholder: 'Napiš, co se ti líbí nebo nelíbí...',
-      },
-    ],
-  },
-  'holcici-party': {
-    title: 'Hodnocení holčičí party',
-    subtitle:
-      'Ahoj! Budeme rádi za tvou zpětnou vazbu. Známkování jako ve škole — 1 je nejlepší, 5 je nejhorší.',
-    adminKey: 'holcici2026',
-    successMessage: 'Díky za hodnocení! 🎉',
-    fields: [
-      {
-        name: 'celkove_hodnoceni',
-        label: 'Celková spokojenost',
-        type: 'rating',
-        required: true,
-        defaultValue: '1 - Super',
-        options: [
-          '1 - Super',
-          '2 - Chvalitebne',
-          '3 - Dobre',
-          '4 - Ujde',
-          '5 - Nic moc',
-        ],
-      },
-      {
-        name: 'komentar',
-        label: 'Cokoliv nám chceš říct?',
-        type: 'textarea',
-        required: false,
-        placeholder: 'Napiš, co se ti libilo nebo nelibilo...',
-      },
-      {
-        name: 'jmeno',
-        label: 'Jméno (nepovinné)',
-        type: 'text',
-        required: false,
-        placeholder: 'Napiš své jméno...',
       },
     ],
   },
