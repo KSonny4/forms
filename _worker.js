@@ -412,6 +412,99 @@ const RESULTS_STYLES = `
 
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: #f9fafb; }
+
+  .admin-bar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .admin-bar button,
+  .admin-bar a {
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    transition: background 0.2s;
+  }
+
+  .btn-export {
+    background: #22c55e;
+    color: #ffffff;
+  }
+
+  .btn-export:hover {
+    background: #16a34a;
+  }
+
+  .btn-delete {
+    background: #ef4444;
+    color: #ffffff;
+  }
+
+  .btn-delete:hover {
+    background: #dc2626;
+  }
+
+  .btn-delete:disabled {
+    background: #fca5a5;
+    cursor: not-allowed;
+  }
+
+  .btn-delete-sm {
+    background: none;
+    border: 1.5px solid #fca5a5;
+    color: #ef4444;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-delete-sm:hover {
+    background: #fef2f2;
+  }
+
+  td:first-child {
+    width: 40px;
+    text-align: center;
+  }
+
+  td:last-child {
+    width: 60px;
+    text-align: center;
+  }
+
+  th:first-child {
+    width: 40px;
+    text-align: center;
+  }
+
+  th:last-child {
+    width: 60px;
+    text-align: center;
+  }
+
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #6366f1;
+    cursor: pointer;
+  }
+
+  .selected-count {
+    font-size: 13px;
+    color: #6b7280;
+  }
 `
 
 const LOGIN_STYLES = `
@@ -483,6 +576,16 @@ export default {
     // GET /api/results/<formName>
     if (slug === 'api' && rest[0] === 'results') {
       return handleResults(rest[1], request, environment)
+    }
+
+    // GET /api/export/<formName> — CSV download
+    if (slug === 'api' && rest[0] === 'export') {
+      return handleExport(rest[1], request, environment)
+    }
+
+    // POST /api/delete/<formName> — delete submissions
+    if (slug === 'api' && rest[0] === 'delete' && request.method === 'POST') {
+      return handleDelete(rest[1], request, environment)
     }
 
     // Root path — 404 (no form listing)
@@ -616,6 +719,48 @@ async function handleResults(formName, request, environment) {
     for (const key of keyList.keys) {
       const rawValue = await environment.FORM_SUBMISSIONS.get(key.name)
       if (rawValue) {
+        const submission = JSON.parse(rawValue)
+        submission.kvKey = key.name
+        submissions.push(submission)
+      }
+    }
+
+    submissions.sort(
+      (first, second) => second.timestamp - first.timestamp
+    )
+
+    return htmlResponse(renderResultsPage(formConfiguration, formName, formConfiguration.adminKey, submissions))
+  } catch (error) {
+    return htmlResponse(renderErrorPage(error), 500)
+  }
+}
+
+// ─── Export handler ────────────────────────────────────────────────────────
+
+async function handleExport(formName, request, environment) {
+  const formConfiguration = FORMS[formName]
+
+  if (!formName || !formConfiguration) {
+    return jsonResponse({ error: 'Form not found' }, 404)
+  }
+
+  const url = new URL(request.url)
+  const adminKey = url.searchParams.get('key')
+
+  if (adminKey !== formConfiguration.adminKey) {
+    return jsonResponse({ error: 'Neopravneny pristup' }, 401)
+  }
+
+  try {
+    const keyList = await environment.FORM_SUBMISSIONS.list({
+      prefix: `submission:${formName}:`,
+    })
+
+    const submissions = []
+
+    for (const key of keyList.keys) {
+      const rawValue = await environment.FORM_SUBMISSIONS.get(key.name)
+      if (rawValue) {
         submissions.push(JSON.parse(rawValue))
       }
     }
@@ -624,9 +769,93 @@ async function handleResults(formName, request, environment) {
       (first, second) => second.timestamp - first.timestamp
     )
 
-    return htmlResponse(renderResultsPage(formConfiguration, submissions))
+    // Build CSV
+    const csvHeader = ['Datum', ...formConfiguration.fields.map((f) => f.label)]
+    const csvRows = submissions.map((submission) => {
+      const date = new Date(submission.timestamp).toLocaleDateString('cs-CZ', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+
+      const cells = formConfiguration.fields.map((field) => {
+        const rawValue = submission[field.name]
+
+        if (field.type === 'checkbox' && rawValue) {
+          try {
+            const parsed = JSON.parse(rawValue)
+            return Array.isArray(parsed) ? parsed.join('; ') : rawValue
+          } catch {
+            return rawValue
+          }
+        }
+
+        return rawValue || ''
+      })
+
+      return [date, ...cells]
+    })
+
+    const csvLines = [csvHeader, ...csvRows]
+      .map((row) =>
+        row
+          .map((cell) => {
+            const str = String(cell)
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+              return '"' + str.replace(/"/g, '""') + '"'
+            }
+            return str
+          })
+          .join(',')
+      )
+      .join('\n')
+
+    const filename = `${formName}-${Date.now()}.csv`
+
+    return new Response('\uFEFF' + csvLines, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
+    })
   } catch (error) {
-    return htmlResponse(renderErrorPage(error), 500)
+    return jsonResponse({ error: 'Failed to export' }, 500)
+  }
+}
+
+// ─── Delete handler ────────────────────────────────────────────────────────
+
+async function handleDelete(formName, request, environment) {
+  const formConfiguration = FORMS[formName]
+
+  if (!formName || !formConfiguration) {
+    return jsonResponse({ error: 'Form not found' }, 404)
+  }
+
+  try {
+    const body = await request.json()
+    const adminKey = body.key
+    const kvKeys = body.kvKeys
+
+    if (adminKey !== formConfiguration.adminKey) {
+      return jsonResponse({ error: 'Neopravneny pristup' }, 401)
+    }
+
+    if (!Array.isArray(kvKeys) || kvKeys.length === 0) {
+      return jsonResponse({ error: 'No keys provided' }, 400)
+    }
+
+    const deletePromises = kvKeys.map((kvKey) =>
+      environment.FORM_SUBMISSIONS.delete(kvKey)
+    )
+
+    await Promise.all(deletePromises)
+
+    return jsonResponse({ success: true, deleted: kvKeys.length })
+  } catch (error) {
+    return jsonResponse({ error: 'Failed to delete' }, 500)
   }
 }
 
@@ -872,50 +1101,59 @@ function renderLoginPage(formName) {
 </html>`
 }
 
-function renderResultsPage(formConfiguration, submissions) {
+function renderResultsPage(formConfiguration, formSlug, adminKey, submissions) {
   const fieldLabels = formConfiguration.fields.map((field) =>
     esc(field.label)
   )
 
-  const columnHeaders = ['Datum', ...fieldLabels]
+  const columnHeaders = ['', 'Datum', ...fieldLabels, '']
     .map((label) => `<th>${label}</th>`)
     .join('')
+
+  const dateOptions = {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }
+
+  function formatCell(displayValue) {
+    return esc(displayValue)
+  }
+
+  function fieldDisplay(field, submission) {
+    const rawValue = submission[field.name]
+    if (!rawValue) return ''
+
+    if (field.type === 'checkbox') {
+      try {
+        const parsed = JSON.parse(rawValue)
+        return Array.isArray(parsed) ? parsed.join(', ') : rawValue
+      } catch {
+        return rawValue
+      }
+    }
+
+    return rawValue
+  }
 
   const rowsHtml = submissions
     .map((submission) => {
       const date = new Date(submission.timestamp)
-      const formattedDate = date.toLocaleDateString('cs-CZ', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+      const formattedDate = date.toLocaleDateString('cs-CZ', dateOptions)
+      const kvKey = esc(submission.kvKey || '')
 
-      const cells = [
-        formattedDate,
-        ...formConfiguration.fields.map((field) => {
-          const rawValue = submission[field.name]
-          if (!rawValue) return ''
-
-          if (field.type === 'checkbox') {
-            try {
-              const parsed = JSON.parse(rawValue)
-              return Array.isArray(parsed) ? esc(parsed.join(', ')) : esc(rawValue)
-            } catch {
-              return esc(rawValue)
-            }
-          }
-
-          return esc(rawValue)
-        }),
-      ]
-
-      const cellsHtml = cells
-        .map((cell) => `<td>${cell}</td>`)
+      const dataCells = formConfiguration.fields
+        .map((field) => `<td>${formatCell(fieldDisplay(field, submission))}</td>`)
         .join('')
 
-      return `<tr>${cellsHtml}</tr>`
+      return `<tr>
+        <td><input type="checkbox" class="row-checkbox" value="${kvKey}" /></td>
+        <td>${esc(formattedDate)}</td>
+        ${dataCells}
+        <td><button class="btn-delete-sm" data-kv-key="${kvKey}">Smazat</button></td>
+      </tr>`
     })
     .join('')
 
@@ -925,6 +1163,72 @@ function renderResultsPage(formConfiguration, submissions) {
         Zatim zadne odpovedi
       </td>
     </tr>`
+
+  const exportUrl = `/api/export/${formSlug}?key=${encodeURIComponent(adminKey)}`
+
+  const deleteScript = `
+    const ADMIN_KEY = ${JSON.stringify(adminKey)}
+    const FORM_SLUG = ${JSON.stringify(formSlug)}
+
+    function getSelectedKeys() {
+      return Array.from(document.querySelectorAll('.row-checkbox:checked'))
+        .map(function (cb) { return cb.value })
+        .filter(Boolean)
+    }
+
+    function updateSelectedCount() {
+      var count = getSelectedKeys().length
+      var el = document.getElementById('selected-count')
+      if (el) el.textContent = count > 0 ? count + ' vybrano' : ''
+      var bulkBtn = document.getElementById('bulk-delete-btn')
+      if (bulkBtn) bulkBtn.disabled = count === 0
+    }
+
+    document.addEventListener('change', function (e) {
+      if (e.target.classList.contains('row-checkbox')) updateSelectedCount()
+    })
+
+    document.getElementById('bulk-delete-btn').addEventListener('click', function () {
+      var keys = getSelectedKeys()
+      if (keys.length === 0) return
+      if (!confirm('Opravdu smazat ' + keys.length + ' odpovedi?')) return
+      deleteKeys(keys)
+    })
+
+    document.addEventListener('click', function (e) {
+      if (e.target.classList.contains('btn-delete-sm')) {
+        var key = e.target.getAttribute('data-kv-key')
+        if (key && confirm('Opravdu smazat tuto odpoved?')) deleteKeys([key])
+      }
+    })
+
+    function deleteKeys(keys) {
+      var btn = document.getElementById('bulk-delete-btn')
+      btn.disabled = true
+      btn.textContent = 'Mazu...'
+
+      fetch('/api/delete/' + FORM_SLUG, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: ADMIN_KEY, kvKeys: keys })
+      })
+      .then(function (r) { return r.json() })
+      .then(function (data) {
+        if (data.success) {
+          location.reload()
+        } else {
+          alert('Chyba: ' + (data.error || 'neznama'))
+          btn.disabled = false
+          btn.textContent = 'Smazat vybrane'
+        }
+      })
+      .catch(function () {
+        alert('Chyba pripojeni')
+        btn.disabled = false
+        btn.textContent = 'Smazat vybrane'
+      })
+    }
+  `
 
   return `<!DOCTYPE html>
 <html lang="cs">
@@ -946,6 +1250,12 @@ function renderResultsPage(formConfiguration, submissions) {
       </div>
     </div>
 
+    <div class="admin-bar">
+      <a href="${esc(exportUrl)}" class="btn-export">Export CSV</a>
+      <button id="bulk-delete-btn" class="btn-delete" disabled>Smazat vybrane</button>
+      <span id="selected-count" class="selected-count"></span>
+    </div>
+
     <table>
       <thead>
         <tr>${columnHeaders}</tr>
@@ -955,6 +1265,8 @@ function renderResultsPage(formConfiguration, submissions) {
       </tbody>
     </table>
   </div>
+
+  <script>${deleteScript}</script>
 </body>
 </html>`
 }
