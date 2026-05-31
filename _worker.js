@@ -91,9 +91,44 @@ const FORMS = {
       },
     ],
   },
+  'holcici-party': {
+    title: 'Hodnocení holčičí party',
+    subtitle:
+      'Ahoj! Budeme rádi za tvou zpětnou vazbu. Známkování jako ve škole — 1 je nejlepší, 5 je nejhorší.',
+    adminKey: 'holcici2026',
+    successMessage: 'Díky za hodnocení! 🎉',
+    fields: [
+      {
+        name: 'celkove_hodnoceni',
+        label: 'Celková spokojenost',
+        type: 'rating',
+        required: true,
+        defaultValue: '1 - Super',
+        options: [
+          '1 - Super',
+          '2 - Chvalitebne',
+          '3 - Dobre',
+          '4 - Ujde',
+          '5 - Nic moc',
+        ],
+      },
+      {
+        name: 'komentar',
+        label: 'Cokoliv nám chceš říct?',
+        type: 'textarea',
+        required: false,
+        placeholder: 'Napiš, co se ti libilo nebo nelibilo...',
+      },
+      {
+        name: 'jmeno',
+        label: 'Jméno (nepovinné)',
+        type: 'text',
+        required: false,
+        placeholder: 'Napiš své jméno...',
+      },
+    ],
+  },
 }
-
-// ─── CSS constants ─────────────────────────────────────────────────────────
 
 const FORM_STYLES = `
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -893,13 +928,15 @@ function buildFieldHtml(fieldConfiguration) {
 
     inputHtml = `<div class="checkbox-group">${optionsHtml}</div>`
   } else if (fieldConfiguration.type === 'rating') {
+    const defaultOption = fieldConfiguration.defaultValue || ''
     const optionsHtml = fieldConfiguration.options
       .map((option) => {
         const [value, ...labelParts] = option.split(' - ')
         const label = labelParts.join(' - ')
+        const checked = option === defaultOption ? 'checked' : ''
         return `
         <label class="rating-card">
-          <input type="radio" name="${fieldName}" value="${esc(option)}" ${requiredAttribute} />
+          <input type="radio" name="${fieldName}" value="${esc(option)}" ${requiredAttribute} ${checked} />
           <span class="rating-value">${esc(value)}</span>
           <span class="rating-label">${esc(label)}</span>
         </label>`
