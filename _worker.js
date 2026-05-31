@@ -156,7 +156,7 @@ const FORM_STYLES = `
     color: #ef4444;
   }
 
-  select, textarea, input[type="text"] {
+  select, textarea, input[type="text"], input[type="email"] {
     width: 100%;
     padding: 12px 16px;
     border: 1.5px solid #d1d5db;
@@ -168,7 +168,7 @@ const FORM_STYLES = `
     font-family: inherit;
   }
 
-  select:focus, textarea:focus, input[type="text"]:focus {
+  select:focus, textarea:focus, input[type="text"]:focus, input[type="email"]:focus {
     outline: none;
     border-color: #6366f1;
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
