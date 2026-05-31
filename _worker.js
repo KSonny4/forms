@@ -11,9 +11,8 @@ const FORMS = {
       {
         name: 'hodnoceni',
         label: 'Celkové hodnocení',
-        type: 'select',
+        type: 'rating',
         required: true,
-        placeholder: '-- Vyber hodnocení --',
         options: [
           '1 - Nespokojen',
           '2 - Spíš ne',
@@ -46,9 +45,9 @@ const FORMS = {
       {
         name: 'kontakt',
         label: 'Kontakt (nepovinný)',
-        type: 'text',
+        type: 'email',
         required: false,
-        placeholder: 'Email nebo telefon...',
+        placeholder: 'tvuj@email.cz',
       },
     ],
   },
@@ -79,9 +78,9 @@ const FORMS = {
       {
         name: 'kontakt',
         label: 'Kontakt',
-        type: 'text',
+        type: 'email',
         required: true,
-        placeholder: 'Email nebo telefon...',
+        placeholder: 'tvuj@email.cz',
       },
       {
         name: 'komentar',
@@ -276,6 +275,62 @@ const FORM_STYLES = `
     height: 18px;
     accent-color: #6366f1;
     flex-shrink: 0;
+  }
+
+  .rating-group {
+    display: flex;
+    gap: 12px;
+    padding-top: 4px;
+  }
+
+  .rating-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 16px 8px;
+    border: 2px solid #d1d5db;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    text-align: center;
+  }
+
+  .rating-card:hover {
+    border-color: #818cf8;
+    background: #f5f5ff;
+  }
+
+  .rating-card input[type="radio"] {
+    display: none;
+  }
+
+  .rating-card:has(input:checked) {
+    border-color: #6366f1;
+    background: #eef2ff;
+  }
+
+  .rating-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1;
+  }
+
+  .rating-label {
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.2;
+  }
+
+  .rating-card:has(input:checked) .rating-value {
+    color: #6366f1;
+  }
+
+  .rating-card:has(input:checked) .rating-label {
+    color: #6366f1;
+    font-weight: 600;
   }
 `
 
@@ -608,6 +663,31 @@ function buildFieldHtml(fieldConfiguration) {
       .join('')
 
     inputHtml = `<div class="checkbox-group">${optionsHtml}</div>`
+  } else if (fieldConfiguration.type === 'rating') {
+    const optionsHtml = fieldConfiguration.options
+      .map((option) => {
+        const [value, ...labelParts] = option.split(' - ')
+        const label = labelParts.join(' - ')
+        return `
+        <label class="rating-card">
+          <input type="radio" name="${fieldName}" value="${esc(option)}" ${requiredAttribute} />
+          <span class="rating-value">${esc(value)}</span>
+          <span class="rating-label">${esc(label)}</span>
+        </label>`
+      })
+      .join('')
+
+    inputHtml = `<div class="rating-group">${optionsHtml}</div>`
+  } else if (fieldConfiguration.type === 'email') {
+    const placeholder = esc(fieldConfiguration.placeholder || '')
+
+    inputHtml = `
+      <input
+        type="email"
+        id="${fieldName}"
+        name="${fieldName}"
+        ${requiredAttribute}
+        placeholder="${placeholder}" />`
   } else if (fieldConfiguration.type === 'text') {
     const placeholder = esc(fieldConfiguration.placeholder || '')
 
